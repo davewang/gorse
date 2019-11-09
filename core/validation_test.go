@@ -48,13 +48,16 @@ func TestCrossValidate(t *testing.T) {
 func TestGridSearchCV(t *testing.T) {
 	// Grid search
 	paramGrid := ParameterGrid{
-		base.Lr:    {6, 4, 2},
-		base.Reg:   {7, 5, 3},
-		base.Alpha: {3, 2, 1},
+		base.Lr:    FromCategorical{6, 4, 2},
+		base.Reg:   FromCategorical{7, 5, 3},
+		base.Alpha: FromCategorical{3, 2, 1},
 	}
 	model := new(CVTestModel)
 	model.SetParams(base.Params{base.InitMean: 10})
-	out := GridSearchCV(model, nil, paramGrid, NewKFoldSplitter(5), 0, nil, CVTestEvaluator)
+	out, err := GridSearchCV(model, nil, paramGrid, NewKFoldSplitter(5), 0, nil, CVTestEvaluator)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Check best parameters
 	assert.Equal(t, 16.0, out[0].BestScore)
 	assert.Equal(t, 26, out[0].BestIndex)
@@ -64,15 +67,35 @@ func TestGridSearchCV(t *testing.T) {
 func TestRandomSearchCV(t *testing.T) {
 	// Grid search
 	paramGrid := ParameterGrid{
-		base.Lr:    {6, 4, 2},
-		base.Reg:   {7, 5, 3},
-		base.Alpha: {3, 2, 1},
+		base.Lr:    FromCategorical{6, 4, 2},
+		base.Reg:   FromCategorical{7, 5, 3},
+		base.Alpha: FromCategorical{3, 2, 1},
 	}
 	model := new(CVTestModel)
 	model.SetParams(base.Params{base.InitMean: 10})
-	out := RandomSearchCV(model, nil, paramGrid, NewKFoldSplitter(5), 100, 0, nil, CVTestEvaluator)
+	out, err := RandomSearchCV(model, nil, paramGrid, NewKFoldSplitter(5), 100, 0, nil, CVTestEvaluator)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Check best parameters
 	assert.Equal(t, 16.0, out[0].BestScore)
+	assert.Equal(t, base.Params{base.Lr: 2, base.Reg: 3, base.Alpha: 1}, out[0].BestParams)
+}
+
+func TestBayesianOptimizationCV(t *testing.T) {
+	paramGrid := ParameterGrid{
+		base.Lr:    FromInt{2, 6},
+		base.Reg:   FromInt{3, 7},
+		base.Alpha: FromInt{1, 3},
+	}
+	model := new(CVTestModel)
+	model.SetParams(base.Params{base.InitMean: 10})
+	out, err := BayesianOptimizationCV(model, nil, paramGrid, NewKFoldSplitter(5), 100, 0, nil, CVTestEvaluator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Check best parameters
+	assert.Equal(t, 16.0, out[0].BestCost)
 	assert.Equal(t, base.Params{base.Lr: 2, base.Reg: 3, base.Alpha: 1}, out[0].BestParams)
 }
 
