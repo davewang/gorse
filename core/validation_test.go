@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/c-bata/goptuna/tpe"
 	"github.com/stretchr/testify/assert"
 	"github.com/zhenghaoz/gorse/base"
 	"gonum.org/v1/gonum/stat"
@@ -45,44 +46,7 @@ func TestCrossValidate(t *testing.T) {
 	assert.Equal(t, 15.0, stat.Mean(out[0].TestScore, nil))
 }
 
-func TestGridSearchCV(t *testing.T) {
-	// Grid search
-	paramGrid := ParameterGrid{
-		base.Lr:    FromCategorical{6, 4, 2},
-		base.Reg:   FromCategorical{7, 5, 3},
-		base.Alpha: FromCategorical{3, 2, 1},
-	}
-	model := new(CVTestModel)
-	model.SetParams(base.Params{base.InitMean: 10})
-	out, err := GridSearchCV(model, nil, paramGrid, NewKFoldSplitter(5), 0, nil, CVTestEvaluator)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Check best parameters
-	assert.Equal(t, 16.0, out[0].BestScore)
-	assert.Equal(t, 26, out[0].BestIndex)
-	assert.Equal(t, base.Params{base.Lr: 2, base.Reg: 3, base.Alpha: 1}, out[0].BestParams)
-}
-
-func TestRandomSearchCV(t *testing.T) {
-	// Grid search
-	paramGrid := ParameterGrid{
-		base.Lr:    FromCategorical{6, 4, 2},
-		base.Reg:   FromCategorical{7, 5, 3},
-		base.Alpha: FromCategorical{3, 2, 1},
-	}
-	model := new(CVTestModel)
-	model.SetParams(base.Params{base.InitMean: 10})
-	out, err := RandomSearchCV(model, nil, paramGrid, NewKFoldSplitter(5), 100, 0, nil, CVTestEvaluator)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Check best parameters
-	assert.Equal(t, 16.0, out[0].BestScore)
-	assert.Equal(t, base.Params{base.Lr: 2, base.Reg: 3, base.Alpha: 1}, out[0].BestParams)
-}
-
-func TestBayesianOptimizationCV(t *testing.T) {
+func TestHyperParametersOptimizationCV(t *testing.T) {
 	paramGrid := ParameterGrid{
 		base.Lr:    FromInt{2, 6},
 		base.Reg:   FromInt{3, 7},
@@ -90,13 +54,19 @@ func TestBayesianOptimizationCV(t *testing.T) {
 	}
 	model := new(CVTestModel)
 	model.SetParams(base.Params{base.InitMean: 10})
-	out, err := BayesianOptimizationCV(model, nil, paramGrid, NewKFoldSplitter(5), 100, 0, nil, CVTestEvaluator)
+	out, err := HyperParametersOptimizationCV(model, nil, paramGrid, tpe.NewSampler(), NewKFoldSplitter(5), 100, 0, nil, CVTestEvaluator)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Check best parameters
-	assert.Equal(t, 16.0, out[0].BestCost)
-	assert.Equal(t, base.Params{base.Lr: 2, base.Reg: 3, base.Alpha: 1}, out[0].BestParams)
+	assert.Equal(t, 16.0, out.BestCost)
+	assert.Equal(t, 16.0, out.BestScore)
+	assert.Equal(t, base.Params{base.Lr: 2, base.Reg: 3, base.Alpha: 1}, out.BestParams)
+	assert.Equal(t, out.BestCost, stat.Mean(out.Results[out.BestIndex].TestCosts, nil))
+	assert.Equal(t, out.BestScore, stat.Mean(out.Results[out.BestIndex].TestScore, nil))
+	assert.Equal(t, out.BestParams, out.Params[out.BestIndex])
+	assert.Equal(t, 100, len(out.Params))
+	assert.Equal(t, 100, len(out.Results))
 }
 
 func TestCrossValidateResult_MeanAndMargin(t *testing.T) {

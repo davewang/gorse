@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/c-bata/goptuna"
-	"github.com/c-bata/goptuna/tpe"
 	"github.com/zhenghaoz/gorse/base"
 	"gonum.org/v1/gonum/stat"
 	"math"
@@ -52,8 +51,8 @@ type FromInt struct {
 
 // CrossValidateResult contains the result of cross validate
 type CrossValidateResult struct {
-	TestScore []float64
-	TestCosts []float64
+	TestScore []float64 // TestScore is given by evaluators (such as RMSE, Precision, etc.)
+	TestCosts []float64 // TestCosts is used for hyper-parameter optimization (lower is better).
 }
 
 // MeanAndMargin returns the mean and the margin of cross validation scores.
@@ -116,130 +115,19 @@ type ModelSelectionResult struct {
 	BestCost   float64
 	BestParams base.Params
 	BestIndex  int
-	CVResults  []CrossValidateResult
-	AllParams  []base.Params
+	Results    []CrossValidateResult
+	Params     []base.Params
 }
 
-// GridSearchCV finds the best parameters for a model.
-func GridSearchCV(estimator ModelInterface, dataSet DataSetInterface, paramGrid ParameterGrid,
-	splitter Splitter, seed int64, options *base.RuntimeOptions, evaluators ...CrossValidationEvaluator) ([]ModelSelectionResult, error) {
-	// Retrieve parameter names and length
-	paramNames := make([]base.ParamName, 0, len(paramGrid))
-	count := 1
-	for paramName, values := range paramGrid {
-		switch values.(type) {
-		case FromCategorical:
-			paramNames = append(paramNames, paramName)
-			count *= len(values.(FromCategorical))
-		default:
-			return nil, errors.New(fmt.Sprintf("GridSearchCV: expect %s to be FromCategorical", paramName))
-		}
-	}
-	// Construct DFS procedure
-	var results []ModelSelectionResult
-	var dfs func(deep int, params base.Params)
-	progress := 0
-	dfs = func(deep int, params base.Params) {
-		if deep == len(paramNames) {
-			progress++
-			options.Logf("grid search (%v/%v): %v", progress, count, params)
-			// Cross validate
-			estimator.SetParams(estimator.GetParams().Merge(params))
-			cvResults := CrossValidate(estimator, dataSet, splitter, seed, options, evaluators...)
-			// Create GridSearch result
-			if results == nil {
-				results = make([]ModelSelectionResult, len(cvResults))
-				for i := range results {
-					results[i] = ModelSelectionResult{}
-					results[i].BestCost = math.Inf(1)
-					results[i].CVResults = make([]CrossValidateResult, 0, count)
-					results[i].AllParams = make([]base.Params, 0, count)
-				}
-			}
-			for i := range cvResults {
-				results[i].CVResults = append(results[i].CVResults, cvResults[i])
-				results[i].AllParams = append(results[i].AllParams, params.Copy())
-				cost := stat.Mean(cvResults[i].TestCosts, nil)
-				score := stat.Mean(cvResults[i].TestScore, nil)
-				if cost < results[i].BestCost {
-					results[i].BestScore = score
-					results[i].BestCost = cost
-					results[i].BestParams = params.Copy()
-					results[i].BestIndex = len(results[i].AllParams) - 1
-				}
-			}
-		} else {
-			paramName := paramNames[deep]
-			values := paramGrid[paramName]
-			for _, val := range values.(FromCategorical) {
-				params[paramName] = val
-				dfs(deep+1, params)
-			}
-		}
-	}
-	params := make(map[base.ParamName]interface{})
-	dfs(0, params)
-	return results, nil
-}
-
-// RandomSearchCV searches hyper-parameters by random.
-func RandomSearchCV(estimator ModelInterface, dataSet DataSetInterface, paramGrid ParameterGrid,
-	splitter Splitter, trial int, seed int64, options *base.RuntimeOptions, evaluators ...CrossValidationEvaluator) ([]ModelSelectionResult, error) {
-	rng := base.NewRandomGenerator(seed)
-	var results []ModelSelectionResult
-	for i := 0; i < trial; i++ {
-		// Make parameters
-		params := base.Params{}
-		for paramName, values := range paramGrid {
-			switch values.(type) {
-			case FromCategorical:
-				index := rng.Intn(len(values.(FromCategorical)))
-				value := values.(FromCategorical)[index]
-				params[paramName] = value
-			default:
-				return nil, errors.New(fmt.Sprintf("GridSearchCV: expect %s to be FromCategorical", paramName))
-			}
-		}
-		// Cross validate
-		options.Logf("random search (%v/%v): %v", i+1, trial, params)
-		estimator.SetParams(estimator.GetParams().Merge(params))
-		cvResults := CrossValidate(estimator, dataSet, splitter, seed, options, evaluators...)
-		if results == nil {
-			results = make([]ModelSelectionResult, len(cvResults))
-			for i := range results {
-				results[i] = ModelSelectionResult{}
-				results[i].BestCost = math.Inf(1)
-				results[i].CVResults = make([]CrossValidateResult, trial)
-				results[i].AllParams = make([]base.Params, trial)
-			}
-		}
-		for j := range cvResults {
-			results[j].CVResults[i] = cvResults[j]
-			results[j].AllParams[i] = params.Copy()
-			score := stat.Mean(cvResults[j].TestScore, nil)
-			cost := stat.Mean(cvResults[j].TestCosts, nil)
-			if cost < results[j].BestCost {
-				results[j].BestCost = cost
-				results[j].BestScore = score
-				results[j].BestParams = params.Copy()
-				results[j].BestIndex = len(results[j].AllParams) - 1
-			}
-		}
-	}
-	return results, nil
-}
-
-// BayesianOptimizationCV searches hyper-parameters by bayesian optimization.
-func BayesianOptimizationCV(estimator ModelInterface, dataSet DataSetInterface, paramGrid ParameterGrid,
-	splitter Splitter, trial int, seed int64, options *base.RuntimeOptions, evaluators ...CrossValidationEvaluator) ([]ModelSelectionResult, error) {
-	// check evaluators
-	if len(evaluators) == 0 {
-		return nil, nil
-	} else if len(evaluators) > 1 {
-		return nil, errors.New("BayesianOptimizationCV supports only one evaluator")
-	}
+// HyperParametersOptimizationCV searches hyper-parameters.
+func HyperParametersOptimizationCV(estimator ModelInterface, dataSet DataSetInterface, paramGrid ParameterGrid,
+	sampler goptuna.Sampler, splitter Splitter, trial int, seed int64, options *base.RuntimeOptions, evaluator CrossValidationEvaluator) (ModelSelectionResult, error) {
 	// create objective
-	var result ModelSelectionResult
+	result := ModelSelectionResult{
+		BestCost: math.Inf(1),
+		Results:  make([]CrossValidateResult, 0, trial),
+		Params:   make([]base.Params, 0, trial),
+	}
 	objective := func(trial goptuna.Trial) (float64, error) {
 		// create parameters
 		params := base.Params{}
@@ -260,43 +148,31 @@ func BayesianOptimizationCV(estimator ModelInterface, dataSet DataSetInterface, 
 			}
 		}
 		estimator.SetParams(estimator.GetParams().Merge(params))
-		cvResult := CrossValidate(estimator, dataSet, splitter, seed, options, evaluators...)[0]
-		result.AllParams = append(result.AllParams, params)
-		result.CVResults = append(result.CVResults, cvResult)
-		return stat.Mean(cvResult.TestCosts, nil), nil
+		cvResult := CrossValidate(estimator, dataSet, splitter, seed, options, evaluator)[0]
+		result.Params = append(result.Params, params)
+		result.Results = append(result.Results, cvResult)
+		cost := stat.Mean(cvResult.TestCosts, nil)
+		if cost < result.BestCost {
+			result.BestCost = cost
+			result.BestScore = stat.Mean(cvResult.TestScore, nil)
+			result.BestIndex = len(result.Results) - 1
+			result.BestParams = params
+		}
+		return cost, nil
 	}
 	// create study
 	study, err := goptuna.CreateStudy(
-		"BayesianOptimizationCV",
-		goptuna.StudyOptionSampler(tpe.NewSampler()),
+		"HyperParametersOptimizationCV",
+		goptuna.StudyOptionSampler(sampler),
 	)
 	if err != nil {
-		return nil, err
+		return result, err
 	}
 	// optimize study
 	if err = study.Optimize(objective, trial); err != nil {
-		return nil, err
+		return result, err
 	}
-	// collect result
-	v, _ := study.GetBestValue()
-	p, _ := study.GetBestParams()
-	result.BestCost = v
-	result.BestScore = math.NaN()
-	result.BestIndex = -1
-	result.BestParams = base.Params{}
-	for paramName, values := range paramGrid {
-		switch values.(type) {
-		case FromInt:
-			result.BestParams[paramName] = p[string(paramName)].(int)
-		case FromUniform:
-			result.BestParams[paramName] = p[string(paramName)].(float64)
-		case FromLogUniform:
-			result.BestParams[paramName] = p[string(paramName)].(float64)
-		case FromCategorical:
-			result.BestParams[paramName] = p[string(paramName)].(string)
-		}
-	}
-	return []ModelSelectionResult{result}, nil
+	return result, nil
 }
 
 // Copy a object from src to dst.
