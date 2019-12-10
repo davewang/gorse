@@ -123,7 +123,6 @@ func LoadModel(name string, params base.Params) core.ModelInterface {
 	case "item_pop":
 		return model.NewItemPop(params)
 	}
-	log.Fatalf("unkown model %s", name)
 	return nil
 }
 
@@ -169,7 +168,7 @@ func (config *TomlConfig) FillDefault(meta toml.MetaData) {
 		config.Recommend.FitJobs = 1
 	}
 	if !meta.IsDefined("recommend", "similarity") {
-		config.Recommend.Similarity = "pearson"
+		config.Recommend.Similarity = "implicit"
 	}
 }
 

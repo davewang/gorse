@@ -162,7 +162,7 @@ var commandTest = &cobra.Command{
 			table.Append(row)
 		}
 		table.Render()
-		log.Printf("Complete cross validation (%v7.0.0.)\n", elapsed)
+		log.Printf("Complete cross validation (%v)\n", elapsed)
 	},
 }
 
@@ -177,7 +177,7 @@ var models = map[string]core.ModelInterface{
 	"slope-one":     model.NewSlopOne(nil),
 	"co-clustering": model.NewCoClustering(nil),
 	"bpr":           model.NewBPR(nil),
-	"knn_implicit":  model.NewKNNImplicit(nil),
+	"knn-implicit":  model.NewKNNImplicit(nil),
 }
 
 /* Flags for evaluators */
