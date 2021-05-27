@@ -1,6 +1,6 @@
 # gorse: Go Recommender System Engine
 
-<img width=160 src="https://gorse.io/zh/docs/img/gorse.png"/>
+<img width=160 src="assets/gorse.png"/>
 
 [![build](https://github.com/zhenghaoz/gorse/workflows/build/badge.svg)](https://github.com/zhenghaoz/gorse/actions?query=workflow%3Abuild)
 [![codecov](https://codecov.io/gh/zhenghaoz/gorse/branch/master/graph/badge.svg)](https://codecov.io/gh/zhenghaoz/gorse)
@@ -21,6 +21,7 @@ Gorse is an open source recommendation system written in Go. Gorse aims to be an
 - [Run Gorse manually](https://github.com/zhenghaoz/gorse/tree/master/cmd)
 - [Run Gorse with Docker Compose](https://github.com/zhenghaoz/gorse/tree/master/docker)
 - [Use Gorse to recommend awesome GitHub repositories](https://github.com/zhenghaoz/gitrec)
+- [Read official documents](https://docs.gorse.io/)
 
 ## Architecture
 
